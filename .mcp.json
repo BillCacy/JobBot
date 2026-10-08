@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "jobbot": {
+      "command": "node",
+      "args": ["dist/index.js"]
+    }
+  }
+}
