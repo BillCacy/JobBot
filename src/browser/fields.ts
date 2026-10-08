@@ -17,8 +17,8 @@ export interface FormField {
 }
 
 // In-page code is kept as a plain string so bundlers/transpilers can't inject helpers
-// that don't exist in the browser.
-const SCAN_SCRIPT = String.raw`(() => {
+// that don't exist in the browser. The bookmarklet runs it too.
+export const SCAN_SCRIPT = String.raw`(() => {
   const clean = (s) => (s || "").replace(/\s+/g, " ").trim();
   const strip = (s) => s.replace(/\s*[*✱]\s*$/, "").trim();
   const visible = (el) => {
@@ -43,7 +43,8 @@ const SCAN_SCRIPT = String.raw`(() => {
     }
     return clean(el.getAttribute("placeholder") || el.getAttribute("name") || el.id || "");
   };
-  const groupLabel = (el) => {
+  const OTHER_CONTROLS = "input:not([type=radio]):not([type=checkbox]):not([type=hidden]), select, textarea";
+  const groupLabel = (el, single) => {
     const fs = el.closest("fieldset");
     const legend = fs && fs.querySelector("legend");
     if (legend) return clean(legend.innerText);
@@ -55,6 +56,8 @@ const SCAN_SCRIPT = String.raw`(() => {
     }
     let node = el.parentElement;
     for (let depth = 0; node && depth < 6; depth++, node = node.parentElement) {
+      // A lone checkbox's question sits next to it; once the walk reaches other fields, any label found belongs to them.
+      if (single && node.querySelector(OTHER_CONTROLS)) return "";
       if (node.querySelectorAll("input[type=radio],input[type=checkbox]").length < 2 && depth < 2) continue;
       const cand = node.querySelector(":scope > label, :scope > .application-label, :scope > [class*='label' i], :scope > [class*='question' i], :scope > div > label:not(:has(input))");
       if (cand && !cand.contains(el)) { const t = clean(cand.innerText); if (t) return t; }
@@ -115,7 +118,8 @@ const SCAN_SCRIPT = String.raw`(() => {
       const filled = shown ? true : hidden ? !!hidden.value : false;
       fields.push({ ...base, kind: "combobox", filled, value: shown ? clean(shown.innerText) : filled ? el.value : undefined });
     } else {
-      fields.push({ ...base, kind: el.tagName === "TEXTAREA" ? "textarea" : "text", filled: !!el.value.trim(),
+      // An input mask like "(___) ___-____" has no letters or digits, so it doesn't count as filled.
+      fields.push({ ...base, kind: el.tagName === "TEXTAREA" ? "textarea" : "text", filled: /[\p{L}\p{N}]/u.test(el.value),
         value: el.value || undefined, inputType: type || undefined });
     }
   }
@@ -124,7 +128,7 @@ const SCAN_SCRIPT = String.raw`(() => {
     const id = tag(first);
     for (const el of g.els) el.dataset.jobbotGroup = id;
     const single = g.kind === "checkbox" && g.els.length === 1;
-    const rawLabel = single ? (groupLabel(first) || optionLabel(first)) : groupLabel(first);
+    const rawLabel = single ? (groupLabel(first, true) || optionLabel(first)) : groupLabel(first, false);
     const label = strip(rawLabel);
     const checked = g.els.filter((e) => e.checked).map(optionLabel);
     fields.push({ id, kind: g.kind, label: single && label !== optionLabel(first) ? label + " — " + optionLabel(first) : label,

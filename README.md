@@ -179,7 +179,31 @@ Dismissed jobs are hidden from future searches.
    same way as above.
 3. You submit, then tell Claude ("I submitted it") so it's tracked.
 
-If a CAPTCHA appears, solve it in the browser window.
+If a CAPTCHA appears, solve it in the browser window. If it says the browser check failed, use JobBot Fill
+(below) in your everyday browser instead.
+
+### JobBot Fill: fill forms in your own browser
+
+Some sites' bot checks reject JobBot's browser window because it's automated. JobBot Fill is a bookmark that
+fills the form in the browser you normally use, so those checks pass.
+
+> Give me the JobBot Fill bookmark.
+
+Claude opens `data/bookmarklet.html`. Drag the **JobBot Fill** button to your bookmarks bar (once). Then, on any
+employer application form:
+
+1. Click **JobBot Fill**. It fills what your profile and saved answers cover, and a small panel lists what's left.
+   Required fields it couldn't fill are outlined.
+2. Attach your resume yourself. Browsers don't let a bookmark pick files from your computer.
+3. Answer anything outlined, complete the verification, and click Submit yourself.
+4. Tell Claude you applied so it's tracked.
+
+While JobBot is running in Claude, the bookmark reads your current profile from it. Otherwise it uses the copy
+saved inside the bookmark, and the panel shows the date of that copy. The page is refreshed whenever your profile or
+answers change. Drag the new button over the old one to update the saved copy. The panel reminds you when it's
+out of date.
+
+Like JobBot's own window, it doesn't fill anything on Dice, Indeed, ZipRecruiter, Monster or LinkedIn pages.
 
 ---
 
@@ -203,6 +227,7 @@ Statuses: prepared, submitted, skipped, rejected, interviewing, offer, withdrawn
 | Add companies | "Add Stripe and Figma to my job search" |
 | Daily routine | "Run my job search and show only new jobs scored 70+" |
 | Check job-site sign-ins | "Am I still signed in to Dice and Indeed?" |
+| Fill a form in your own browser | "Give me the JobBot Fill bookmark" |
 | Close a finished browser tab | "Close the Discord application tab" |
 
 ---
@@ -217,9 +242,16 @@ Everything stays on your computer in the `data/` folder:
 | `data/screenshots/` | Screenshots of filled-in forms |
 | `data/cover-letters/` | Cover letters generated for applications |
 | `data/browser-profile/` | JobBot's browser profile, including job-site sign-ins. **Treat it like a saved password**: don't share it |
+| `data/bookmarklet.html` | The JobBot Fill bookmark, with your contact details and saved answers inside. Don't share it or the bookmark |
 
 `data/` is excluded from git. To start over, delete it. Your profile and job details are sent to Claude
 during your conversations so it can read, score and fill. Passwords are never stored or sent.
+
+While it runs, JobBot serves your contact details and saved answers to the JobBot Fill bookmark at
+`127.0.0.1:47321`. Only your own computer can reach that address, and requests need the secret key stored in
+your bookmark. A page you run the bookmark on can see the data it fills in, so use it only on application forms.
+Chrome or Edge may ask whether the site can access devices on your local network. Allow it to get live data, or
+block it and the bookmark uses its saved copy.
 
 Settings (environment variables, all optional):
 
@@ -228,6 +260,7 @@ Settings (environment variables, all optional):
 | `JOBBOT_DATA_DIR` | `./data` | Where data is stored |
 | `JOBBOT_BROWSER_CHANNEL` | `msedge` on Windows, otherwise `chrome` | Browser to use. `chromium` uses the bundled one |
 | `JOBBOT_HEADLESS` | unset | `1` hides the browser. For testing only, since you can't review a hidden form |
+| `JOBBOT_FILL_PORT` | `47321` | Local port that serves live data to the JobBot Fill bookmark. Changing it needs a new bookmark |
 
 ---
 
@@ -242,6 +275,8 @@ Settings (environment variables, all optional):
 | A job site keeps asking you to sign in | Say "sign me in to Dice" again. Sessions expire |
 | "No open browser tab for application" | The window was closed. Ask Claude to prepare the application again |
 | Submit didn't confirm | Usually a CAPTCHA or a field error. Check the browser, submit yourself, then say "mark it submitted" |
+| "Browser check failed" or the CAPTCHA keeps rejecting JobBot's window | Open the form in your everyday browser and use JobBot Fill |
+| JobBot Fill says it found no form fields | The form is probably inside a frame. Open the frame in its own tab, or fill it in JobBot's window |
 
 ## Limitations
 
@@ -268,9 +303,10 @@ npm run build
 | `src/sources/` | Greenhouse, Lever and Ashby job-list fetchers; criteria filters |
 | `src/boards.ts` | Job-site sign-in URLs |
 | `src/browser/` | Browser session, form scanning and filling, autofill rules |
+| `src/bookmarklet.ts` | JobBot Fill: bookmark page generator, in-page filler and the local live-data server |
 
 The server makes no AI calls itself. The connected Claude client does the reading, scoring and writing.
 Tools: `resume_read`, `profile_save`, `profile_get`, `answers_set`, `criteria_set`, `boards_add`,
 `jobs_search`, `jobs_import`, `job_get`, `job_score`, `job_dismiss`, `board_login`, `board_session_check`,
 `application_prepare`, `application_autofill`, `application_fill`, `application_review`, `application_submit`,
-`application_mark`, `applications_list`, `application_close`.
+`application_mark`, `applications_list`, `application_close`, `bookmarklet_get`.

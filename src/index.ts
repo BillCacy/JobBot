@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -11,6 +12,7 @@ import { CONFIRMATION_RE, fillField, findSubmitButton, scanFields, screenshotFor
 import type { Page } from "playwright";
 import { closeApplicationPage, closePage, getApplicationPage, openApplicationPage, openPage, probeUrl, shutdownBrowser } from "./browser/session.js";
 import { BOARDS, LoginBoardSchema, looksSignedOut } from "./boards.js";
+import { FILL_PORT, fillServerRunning, startFillServer, writeBookmarkletPage } from "./bookmarklet.js";
 import { extractResumeText } from "./resume.js";
 import {
   ApplicationStatusSchema,
@@ -36,6 +38,7 @@ const server = new McpServer(
       "Typical flow: resume_read -> profile_save -> answers_set -> criteria_set/boards_add -> jobs_search -> job_get + job_score -> application_prepare -> application_fill -> application_submit.",
       "Never invent facts about the candidate. If a form question isn't covered by the profile or stored answers, ask the user, then store the answer with answers_set for next time.",
       "Applications are only submitted after the user explicitly approves in the approval prompt, or by the user clicking Submit in the browser themselves.",
+      "If a site's bot check rejects JobBot's browser window, offer bookmarklet_get: the user fills the form in their everyday browser with the JobBot Fill bookmark.",
     ].join("\n"),
   },
 );
@@ -85,6 +88,7 @@ server.registerTool(
   async ({ profile }) => {
     if (profile.resumePath && !existsSync(profile.resumePath)) throw new Error(`resumePath not found: ${profile.resumePath}`);
     store.setProfile(profile);
+    writeBookmarkletPage();
     return json({ saved: true, profile });
   },
 );
@@ -112,7 +116,41 @@ server.registerTool(
       replace: z.boolean().default(false).describe("Replace the whole bank instead of merging"),
     },
   },
-  async ({ answers, replace }) => json({ answers: store.setAnswers(answers, replace) }),
+  async ({ answers, replace }) => {
+    const saved = store.setAnswers(answers, replace);
+    writeBookmarkletPage();
+    return json({ answers: saved });
+  },
+);
+
+/** Opens a file with the OS default handler (the user's everyday browser for .html). */
+function openWithDefaultApp(path: string) {
+  const [cmd, args] =
+    process.platform === "win32" ? ["cmd", ["/c", "start", '""', `"${path}"`]] : [process.platform === "darwin" ? "open" : "xdg-open", [path]];
+  spawn(cmd, args as string[], { detached: true, stdio: "ignore", windowsVerbatimArguments: process.platform === "win32" }).unref();
+}
+
+server.registerTool(
+  "bookmarklet_get",
+  {
+    title: "Get the JobBot Fill bookmarklet",
+    description:
+      "Regenerate data/bookmarklet.html, a page with a 'JobBot Fill' link the user drags to their bookmarks bar. Clicking it on an employer's application " +
+      "form in their everyday browser fills what the profile and answers cover, which avoids bot checks that flag JobBot's automated browser. " +
+      "Use when a CAPTCHA blocks the JobBot window, or after profile/answer changes (the user re-drags the link to refresh its saved copy; " +
+      "while JobBot runs it reads live data anyway). The user attaches the resume, submits, then tells you so you call application_mark.",
+    inputSchema: { open: z.boolean().default(false).describe("Also open the page in the user's default browser") },
+  },
+  async ({ open }) => {
+    const page = writeBookmarkletPage();
+    if (!page) throw new Error("No profile yet. Call resume_read and profile_save first.");
+    if (open) openWithDefaultApp(page.path);
+    return json({
+      ...page,
+      opened: open,
+      liveData: fillServerRunning() ? `served on 127.0.0.1:${FILL_PORT}` : `not served by this process (port ${FILL_PORT} unavailable)`,
+    });
+  },
 );
 
 // ---------- Criteria & boards ----------
@@ -741,6 +779,9 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
   });
 }
 process.stdin.on("close", () => void shutdownBrowser());
+
+startFillServer();
+writeBookmarkletPage();
 
 await server.connect(new StdioServerTransport());
 console.error(`jobbot MCP server running (data: ${DATA_DIR})`);

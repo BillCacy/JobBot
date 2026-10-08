@@ -98,3 +98,21 @@ export function planAutofill(fields: FormField[], input: AutofillInput): Map<str
   }
   return plan;
 }
+
+/**
+ * The planner as source text, for running inside a page (the bookmarklet). It must list every function and
+ * constant planAutofill reaches, since each is serialized on its own.
+ */
+export const PLANNER_SOURCE = [
+  `const norm = ${norm};`,
+  `const HEARD_ABOUT_RE = ${HEARD_ABOUT_RE};`,
+  `const BOARD_NAMES = ${JSON.stringify(BOARD_NAMES)};`,
+  bestOption,
+  standardValue,
+  answerFor,
+  heardAboutCandidates,
+  heardAbout,
+  planAutofill,
+]
+  .map(String)
+  .join("\n");

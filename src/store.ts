@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +18,8 @@ interface Db {
   criteria?: Criteria;
   jobs: Record<string, Job>;
   applications: Record<string, Application>;
+  /** Secret the bookmarklet sends to read live fill data from the local server. */
+  fillToken?: string;
 }
 
 function load(): Db {
@@ -45,6 +48,14 @@ export const store = {
     db.answers = replace ? answers : { ...db.answers, ...answers };
     save();
     return db.answers;
+  },
+
+  getFillToken() {
+    if (!db.fillToken) {
+      db.fillToken = randomBytes(24).toString("base64url");
+      save();
+    }
+    return db.fillToken;
   },
 
   getCriteria: () => db.criteria,
